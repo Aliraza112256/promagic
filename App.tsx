@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -20,7 +20,11 @@ import {
   X,
   Upload,
   Camera,
-  Video
+  Video,
+  ChevronDown,
+  FileCheck,
+  ShieldCheck,
+  Banknote
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -34,7 +38,8 @@ import {
   Pie, 
   Cell,
   LineChart,
-  Line
+  Line,
+  Legend
 } from 'recharts';
 import { parseComplaintText } from './geminiService';
 import { 
@@ -77,7 +82,7 @@ const INITIAL_COMPLAINTS: Complaint[] = [
   }
 ];
 
-const COLORS = ['#0ea5e9', '#6366f1', '#8b5cf6', '#ec4899'];
+const COLORS = ['#0ea5e9', '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'];
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'history' | 'reports' | 'receive'>('dashboard');
@@ -131,6 +136,12 @@ const App: React.FC = () => {
     };
     setComplaints([complaint, ...complaints]);
     setActiveTab('dashboard');
+  };
+
+  const handleUpdateStatus = (id: string, newStatus: ComplaintStatus) => {
+    setComplaints(prev => prev.map(c => 
+      c.id === id ? { ...c, status: newStatus } : c
+    ));
   };
 
   const handleCloseComplaint = (id: string, closeData: any) => {
@@ -316,9 +327,8 @@ const App: React.FC = () => {
                         <th className="px-6 py-4">Complaint No</th>
                         <th className="px-6 py-4">Customer</th>
                         <th className="px-6 py-4">Product</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4">Type</th>
-                        <th className="px-6 py-4">Actions</th>
+                        <th className="px-6 py-4 text-sm">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -330,22 +340,24 @@ const App: React.FC = () => {
                             <p className="text-xs text-slate-500">{complaint.phoneNumber}</p>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-sky-500"></span>
-                              <span className="text-sm">{complaint.productType}</span>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-sm font-medium text-slate-700">{complaint.productType}</span>
+                              <span className="text-[10px] text-slate-400 font-bold uppercase">{complaint.type}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <StatusBadge status={complaint.status} />
+                            <StatusSelector 
+                              currentStatus={complaint.status} 
+                              onChange={(s) => handleUpdateStatus(complaint.id, s)} 
+                            />
                           </td>
-                          <td className="px-6 py-4 text-sm font-medium text-slate-600">{complaint.type}</td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4 text-right">
                             <button 
                               onClick={() => {
                                 setSelectedComplaintId(complaint.id);
                                 setIsCloseModalOpen(true);
                               }}
-                              className="text-sky-600 hover:text-sky-700 text-sm font-bold bg-sky-50 px-4 py-2 rounded-lg transition"
+                              className="text-sky-600 hover:text-sky-700 text-sm font-bold bg-sky-50 hover:bg-sky-100 px-4 py-2 rounded-lg transition"
                             >
                               Close Case
                             </button>
@@ -354,7 +366,7 @@ const App: React.FC = () => {
                       ))}
                       {activeComplaints.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="px-6 py-20 text-center text-slate-400">
+                          <td colSpan={5} className="px-6 py-20 text-center text-slate-400">
                             No active complaints found. Great job!
                           </td>
                         </tr>
@@ -459,6 +471,32 @@ const App: React.FC = () => {
 
 // --- Subcomponents ---
 
+const StatusSelector: React.FC<{ currentStatus: ComplaintStatus; onChange: (s: ComplaintStatus) => void }> = ({ currentStatus, onChange }) => {
+  const getStyle = (s: ComplaintStatus) => {
+    switch (s) {
+      case ComplaintStatus.PENDING: return 'bg-amber-100 text-amber-700 border-amber-200';
+      case ComplaintStatus.IN_PROGRESS: return 'bg-sky-100 text-sky-700 border-sky-200';
+      case ComplaintStatus.REOPENED: return 'bg-rose-100 text-rose-700 border-rose-200';
+      default: return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+  };
+
+  return (
+    <div className="relative inline-block group/select">
+      <select 
+        value={currentStatus} 
+        onChange={(e) => onChange(e.target.value as ComplaintStatus)}
+        className={`appearance-none px-3 py-1 pr-8 rounded-full text-xs font-bold border cursor-pointer focus:outline-none transition-all ${getStyle(currentStatus)} hover:brightness-95`}
+      >
+        <option value={ComplaintStatus.PENDING}>Pending</option>
+        <option value={ComplaintStatus.IN_PROGRESS}>In Progress</option>
+        <option value={ComplaintStatus.REOPENED}>Reopened</option>
+      </select>
+      <ChevronDown className={`absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none transition-colors ${currentStatus === ComplaintStatus.PENDING ? 'text-amber-500' : currentStatus === ComplaintStatus.IN_PROGRESS ? 'text-sky-500' : 'text-rose-500'}`} size={12} />
+    </div>
+  );
+};
+
 const NavItem: React.FC<{ icon: React.ReactNode; label: string; active: boolean; onClick: () => void }> = ({ icon, label, active, onClick }) => (
   <button 
     onClick={onClick}
@@ -487,20 +525,6 @@ const StatCard: React.FC<{ label: string; value: number; icon: React.ReactNode; 
     </div>
   </div>
 );
-
-const StatusBadge: React.FC<{ status: ComplaintStatus }> = ({ status }) => {
-  const styles = {
-    [ComplaintStatus.PENDING]: 'bg-amber-100 text-amber-700',
-    [ComplaintStatus.IN_PROGRESS]: 'bg-sky-100 text-sky-700',
-    [ComplaintStatus.COMPLETED]: 'bg-emerald-100 text-emerald-700',
-    [ComplaintStatus.REOPENED]: 'bg-rose-100 text-rose-700'
-  };
-  return (
-    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${styles[status]}`}>
-      {status}
-    </span>
-  );
-};
 
 const ReceiveForm: React.FC<{ onAdd: (c: Partial<Complaint>) => void }> = ({ onAdd }) => {
   const [pastedText, setPastedText] = useState('');
@@ -645,6 +669,30 @@ const CloseModal: React.FC<{ complaint: Complaint; onClose: () => void; onConfir
     type: complaint.type === ComplaintType.UNKNOWN ? ComplaintType.REVENUE : complaint.type
   });
 
+  const [files, setFiles] = useState<{
+    warrantyCard?: string;
+    invoiceSlip?: string;
+    feedbackVideo?: string;
+  }>({});
+
+  const warrantyRef = useRef<HTMLInputElement>(null);
+  const invoiceRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: 'warrantyCard' | 'invoiceSlip' | 'feedbackVideo') => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFiles(prev => ({ ...prev, [field]: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const isWarranty = data.type === ComplaintType.WARRANTY;
+  const canSubmit = !isWarranty || (files.warrantyCard && files.invoiceSlip);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
@@ -656,7 +704,7 @@ const CloseModal: React.FC<{ complaint: Complaint; onClose: () => void; onConfir
         <h2 className="text-2xl font-bold text-slate-800 mb-2">Close Case #{complaint.complaintNumber}</h2>
         <p className="text-slate-500 mb-8">Customer: {complaint.customerName}</p>
 
-        <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); onConfirm(data); }}>
+        <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); onConfirm({ ...data, ...files }); }}>
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase">Work Performed</label>
             <textarea 
@@ -709,30 +757,87 @@ const CloseModal: React.FC<{ complaint: Complaint; onClose: () => void; onConfir
             </div>
           </div>
 
-          {data.type === ComplaintType.WARRANTY && (
-            <div className="bg-sky-50 p-6 rounded-xl border border-sky-100 space-y-4">
-              <h4 className="text-sm font-bold text-sky-800 flex items-center gap-2">
-                <Camera size={16} /> Warranty Evidence Required
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="aspect-video bg-white rounded-lg border-2 border-dashed border-sky-200 flex flex-col items-center justify-center text-sky-400 gap-1 hover:border-sky-400 transition cursor-pointer">
-                  <Upload size={20} />
-                  <span className="text-[10px] font-bold uppercase">Warranty Card</span>
-                </div>
-                <div className="aspect-video bg-white rounded-lg border-2 border-dashed border-sky-200 flex flex-col items-center justify-center text-sky-400 gap-1 hover:border-sky-400 transition cursor-pointer">
-                  <Upload size={20} />
-                  <span className="text-[10px] font-bold uppercase">Invoice Slip</span>
-                </div>
-                <div className="aspect-video bg-white rounded-lg border-2 border-dashed border-sky-200 flex flex-col items-center justify-center text-sky-400 gap-1 hover:border-sky-400 transition cursor-pointer">
-                  <Video size={20} />
-                  <span className="text-[10px] font-bold uppercase">Feedback Video</span>
-                </div>
+          <div className="bg-sky-50 p-6 rounded-xl border border-sky-100 space-y-4">
+            <h4 className="text-sm font-bold text-sky-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Camera size={16} /> Evidence Attachments
+              </div>
+              {isWarranty && <span className="text-[10px] text-sky-600 bg-sky-200/50 px-2 py-0.5 rounded uppercase font-black tracking-widest">Mandatory</span>}
+            </h4>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Hidden Inputs */}
+              <input type="file" className="hidden" ref={warrantyRef} accept="image/*" onChange={(e) => handleFileChange(e, 'warrantyCard')} />
+              <input type="file" className="hidden" ref={invoiceRef} accept="image/*" onChange={(e) => handleFileChange(e, 'invoiceSlip')} />
+              <input type="file" className="hidden" ref={videoRef} accept="video/*" onChange={(e) => handleFileChange(e, 'feedbackVideo')} />
+
+              {/* Upload Buttons */}
+              <div 
+                onClick={() => warrantyRef.current?.click()}
+                className={`aspect-video rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition cursor-pointer relative overflow-hidden group ${files.warrantyCard ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-sky-200 bg-white text-sky-400 hover:border-sky-400'}`}
+              >
+                {files.warrantyCard ? (
+                  <>
+                    <img src={files.warrantyCard} alt="Warranty Preview" className="absolute inset-0 w-full h-full object-cover opacity-20" />
+                    <FileCheck size={20} className="z-10" />
+                    <span className="text-[10px] font-bold uppercase z-10">Warranty Card</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={20} />
+                    <span className="text-[10px] font-bold uppercase">Warranty Card*</span>
+                  </>
+                )}
+              </div>
+
+              <div 
+                onClick={() => invoiceRef.current?.click()}
+                className={`aspect-video rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition cursor-pointer relative overflow-hidden group ${files.invoiceSlip ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-sky-200 bg-white text-sky-400 hover:border-sky-400'}`}
+              >
+                {files.invoiceSlip ? (
+                  <>
+                    <img src={files.invoiceSlip} alt="Invoice Preview" className="absolute inset-0 w-full h-full object-cover opacity-20" />
+                    <FileCheck size={20} className="z-10" />
+                    <span className="text-[10px] font-bold uppercase z-10">Invoice Slip</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={20} />
+                    <span className="text-[10px] font-bold uppercase">Invoice Slip*</span>
+                  </>
+                )}
+              </div>
+
+              <div 
+                onClick={() => videoRef.current?.click()}
+                className={`aspect-video rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition cursor-pointer relative overflow-hidden group ${files.feedbackVideo ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-sky-200 bg-white text-sky-400 hover:border-sky-400'}`}
+              >
+                {files.feedbackVideo ? (
+                  <>
+                    <FileCheck size={20} className="z-10" />
+                    <span className="text-[10px] font-bold uppercase z-10">Video Added</span>
+                  </>
+                ) : (
+                  <>
+                    <Video size={20} />
+                    <span className="text-[10px] font-bold uppercase">Feedback Video</span>
+                  </>
+                )}
               </div>
             </div>
-          )}
+            {isWarranty && (!files.warrantyCard || !files.invoiceSlip) && (
+              <p className="text-[10px] font-bold text-rose-500 text-center animate-pulse">
+                * Please attach the Warranty Card and Invoice Slip to close this warranty case.
+              </p>
+            )}
+          </div>
 
           <div className="pt-4">
-            <button type="submit" className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition shadow-lg shadow-emerald-100">
+            <button 
+              type="submit" 
+              disabled={!canSubmit}
+              className={`w-full py-3 rounded-xl font-bold transition shadow-lg ${canSubmit ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
+            >
               Submit & Close Complaint
             </button>
           </div>
@@ -762,6 +867,32 @@ const ReportsView: React.FC<{ complaints: Complaint[] }> = ({ complaints }) => {
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [complaints]);
 
+  const caseTypeBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {
+      [ComplaintType.WARRANTY]: 0,
+      [ComplaintType.REVENUE]: 0,
+    };
+    closedComplaints.forEach(c => {
+      if (c.type === ComplaintType.WARRANTY || c.type === ComplaintType.REVENUE) {
+        counts[c.type] += 1;
+      }
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [closedComplaints]);
+
+  const revenueByCaseType = useMemo(() => {
+    const revenue: Record<string, number> = {
+      [ComplaintType.WARRANTY]: 0,
+      [ComplaintType.REVENUE]: 0,
+    };
+    closedComplaints.forEach(c => {
+      if (c.type === ComplaintType.WARRANTY || c.type === ComplaintType.REVENUE) {
+        revenue[c.type] += (c.amountTaken || 0);
+      }
+    });
+    return Object.entries(revenue).map(([name, amount]) => ({ name, amount }));
+  }, [closedComplaints]);
+
   const technicianPerformance = useMemo(() => {
     const techs: Record<string, { completed: number, revenue: number, reopened: number }> = {};
     complaints.forEach(c => {
@@ -778,54 +909,124 @@ const ReportsView: React.FC<{ complaints: Complaint[] }> = ({ complaints }) => {
   }, [complaints]);
 
   const totalRevenue = closedComplaints.reduce((acc, c) => acc + (c.amountTaken || 0), 0);
-  const warrantyCases = closedComplaints.filter(c => c.type === ComplaintType.WARRANTY).length;
-  const revenueCases = closedComplaints.filter(c => c.type === ComplaintType.REVENUE).length;
+  const totalWarrantyCount = closedComplaints.filter(c => c.type === ComplaintType.WARRANTY).length;
+  const totalPaidCount = closedComplaints.filter(c => c.type === ComplaintType.REVENUE).length;
 
   return (
     <div className="space-y-8">
       {/* Quick Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-6">
-          <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <TrendingUp size={32} />
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-6 shadow-sm">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+            <TrendingUp size={28} />
           </div>
           <div>
-            <p className="text-slate-400 text-xs font-bold uppercase">Total Revenue</p>
-            <p className="text-2xl font-black text-slate-800">PKR {totalRevenue.toLocaleString()}</p>
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">Total Revenue</p>
+            <p className="text-xl font-black text-slate-800">PKR {totalRevenue.toLocaleString()}</p>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-6">
-          <div className="w-16 h-16 rounded-full bg-sky-50 flex items-center justify-center text-sky-600">
-            <ClipboardCheck size={32} />
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-6 shadow-sm">
+          <div className="w-14 h-14 rounded-full bg-sky-50 flex items-center justify-center text-sky-600">
+            <ShieldCheck size={28} />
           </div>
           <div>
-            <p className="text-slate-400 text-xs font-bold uppercase">Resolved Cases</p>
-            <p className="text-2xl font-black text-slate-800">{closedComplaints.length}</p>
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">Warranty Cases</p>
+            <p className="text-xl font-black text-slate-800">{totalWarrantyCount}</p>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-6">
-          <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
-            <Users size={32} />
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-6 shadow-sm">
+          <div className="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
+            <Banknote size={28} />
           </div>
           <div>
-            <p className="text-slate-400 text-xs font-bold uppercase">Active Techs</p>
-            <p className="text-2xl font-black text-slate-800">{technicianPerformance.length}</p>
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">Paid Cases</p>
+            <p className="text-xl font-black text-slate-800">{totalPaidCount}</p>
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-6 shadow-sm">
+          <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <Users size={28} />
+          </div>
+          <div>
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">Active Techs</p>
+            <p className="text-xl font-black text-slate-800">{technicianPerformance.length}</p>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Case Type Count Comparison */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+             <ShieldCheck size={18} className="text-sky-500" /> Case Type Breakdown (Counts)
+          </h3>
+          <div className="h-64 flex items-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={caseTypeBreakdown}
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {caseTypeBreakdown.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.name === ComplaintType.WARRANTY ? '#0ea5e9' : '#10b981'} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="space-y-4 pr-8">
+              {caseTypeBreakdown.map((entry) => (
+                <div key={entry.name} className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.name === ComplaintType.WARRANTY ? '#0ea5e9' : '#10b981' }}></div>
+                    <span className="text-xs font-bold text-slate-700 uppercase">{entry.name}</span>
+                  </div>
+                  <span className="text-lg font-black text-slate-900 ml-5">{entry.value} <span className="text-[10px] text-slate-400 font-normal">Cases</span></span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Revenue by Case Type Comparison */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+            <TrendingUp size={18} className="text-emerald-500" /> Revenue Distribution
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={revenueByCaseType} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                <XAxis type="number" hide />
+                <YAxis dataKey="name" type="category" fontSize={10} width={80} axisLine={false} tickLine={false} />
+                <Tooltip 
+                  cursor={{ fill: '#f8fafc' }}
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                />
+                <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
+                   {revenueByCaseType.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.name === ComplaintType.WARRANTY ? '#0ea5e9' : '#10b981'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
         {/* Daily Revenue Chart */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 mb-6">Revenue Growth</h3>
+          <h3 className="text-lg font-bold text-slate-800 mb-6">Revenue Growth Over Time</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={revenueByDay}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis fontSize={12} tickLine={false} axisLine={false} />
                 <Tooltip />
-                <Line type="monotone" dataKey="revenue" stroke="#0ea5e9" strokeWidth={3} dot={{ fill: '#0ea5e9', r: 4 }} />
+                <Line type="monotone" dataKey="revenue" stroke="#6366f1" strokeWidth={3} dot={{ fill: '#6366f1', r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -833,7 +1034,7 @@ const ReportsView: React.FC<{ complaints: Complaint[] }> = ({ complaints }) => {
 
         {/* Product Breakdown */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 mb-6">Case Mix by Product</h3>
+          <h3 className="text-lg font-bold text-slate-800 mb-6">Complaint Volume by Product</h3>
           <div className="h-64 flex items-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -851,11 +1052,11 @@ const ReportsView: React.FC<{ complaints: Complaint[] }> = ({ complaints }) => {
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
-            <div className="space-y-2 pr-8">
+            <div className="grid grid-cols-1 gap-2 pr-4">
               {productBreakdown.map((entry, index) => (
                 <div key={entry.name} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                  <span className="text-xs font-medium text-slate-600">{entry.name}</span>
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{entry.name}</span>
                 </div>
               ))}
             </div>
@@ -864,38 +1065,41 @@ const ReportsView: React.FC<{ complaints: Complaint[] }> = ({ complaints }) => {
 
         {/* Technician Table */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
-          <h3 className="text-lg font-bold text-slate-800 mb-6">Technician Leaderboard</h3>
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-lg font-bold text-slate-800">Technician Performance Summary</h3>
+            <span className="text-xs text-slate-400 font-medium">Sorted by total cases completed</span>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                <tr className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-4">
                   <th className="pb-4">Technician</th>
-                  <th className="pb-4">Completed</th>
-                  <th className="pb-4">Revenue Gen.</th>
+                  <th className="pb-4">Closed Cases</th>
+                  <th className="pb-4">Revenue PKR</th>
                   <th className="pb-4">Reopened</th>
-                  <th className="pb-4">Efficiency</th>
+                  <th className="pb-4">Trust Score</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {technicianPerformance.map(tech => (
-                  <tr key={tech.name} className="group">
-                    <td className="py-4 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center text-sky-600 font-bold text-sm">
+                {technicianPerformance.sort((a,b) => b.completed - a.completed).map(tech => (
+                  <tr key={tech.name} className="group transition-colors hover:bg-slate-50/50">
+                    <td className="py-5 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm">
                         {tech.name[0]}
                       </div>
                       <span className="font-semibold text-slate-800">{tech.name}</span>
                     </td>
-                    <td className="py-4 text-sm text-slate-600 font-medium">{tech.completed}</td>
-                    <td className="py-4 text-sm font-bold text-emerald-600">PKR {tech.revenue.toLocaleString()}</td>
-                    <td className="py-4">
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${tech.reopened > 2 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {tech.reopened}
+                    <td className="py-5 text-sm text-slate-600 font-medium">{tech.completed}</td>
+                    <td className="py-5 text-sm font-bold text-emerald-600">PKR {tech.revenue.toLocaleString()}</td>
+                    <td className="py-5">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${tech.reopened > 2 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {tech.reopened} Reopens
                       </span>
                     </td>
-                    <td className="py-4">
-                      <div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <td className="py-5">
+                      <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-emerald-500 rounded-full" 
+                          className="h-full bg-indigo-500 rounded-full transition-all duration-500" 
                           style={{ width: `${Math.min(100, (tech.completed / (tech.completed + tech.reopened || 1)) * 100)}%` }}
                         ></div>
                       </div>
