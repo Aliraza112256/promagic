@@ -24,7 +24,14 @@ import {
   ChevronDown,
   FileCheck,
   ShieldCheck,
-  Banknote
+  Banknote,
+  User as UserIcon,
+  FileSpreadsheet,
+  Settings2,
+  Database,
+  Printer,
+  Copy,
+  Check
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -47,7 +54,8 @@ import {
   ComplaintStatus, 
   ComplaintType, 
   ProductType, 
-  User 
+  User,
+  PartStatus
 } from './types';
 
 // Initial Mock Data
@@ -64,7 +72,10 @@ const INITIAL_COMPLAINTS: Complaint[] = [
     date: '2023-10-25',
     status: ComplaintStatus.PENDING,
     type: ComplaintType.WARRANTY,
-    reopenCount: 0
+    reopenCount: 0,
+    technicianName: '',
+    partStatus: PartStatus.NONE,
+    partName: ''
   },
   {
     id: '2',
@@ -78,7 +89,10 @@ const INITIAL_COMPLAINTS: Complaint[] = [
     date: '2023-10-24',
     status: ComplaintStatus.IN_PROGRESS,
     type: ComplaintType.REVENUE,
-    reopenCount: 0
+    reopenCount: 0,
+    technicianName: 'Ali Tech',
+    partStatus: PartStatus.REQUIRED,
+    partName: 'Compressor'
   }
 ];
 
@@ -132,6 +146,9 @@ const App: React.FC = () => {
       status: ComplaintStatus.PENDING,
       type: newComplaint.type || ComplaintType.UNKNOWN,
       reopenCount: 0,
+      technicianName: '',
+      partStatus: PartStatus.NONE,
+      partName: '',
       ...newComplaint
     };
     setComplaints([complaint, ...complaints]);
@@ -144,14 +161,30 @@ const App: React.FC = () => {
     ));
   };
 
+  const handleUpdateTechnician = (id: string, name: string) => {
+    setComplaints(prev => prev.map(c => 
+      c.id === id ? { ...c, technicianName: name } : c
+    ));
+  };
+
+  const handleUpdatePartStatus = (id: string, status: PartStatus) => {
+    setComplaints(prev => prev.map(c => 
+      c.id === id ? { ...c, partStatus: status } : c
+    ));
+  };
+
+  const handleUpdatePartName = (id: string, name: string) => {
+    setComplaints(prev => prev.map(c => 
+      c.id === id ? { ...c, partName: name } : c
+    ));
+  };
+
   const handleCloseComplaint = (id: string, closeData: any) => {
     setComplaints(prev => prev.map(c => 
       c.id === id 
         ? { ...c, ...closeData, status: ComplaintStatus.COMPLETED, closingDate: new Date().toISOString().split('T')[0] } 
         : c
     ));
-    setIsCloseModalOpen(false);
-    setSelectedComplaintId(null);
   };
 
   const handleReopen = (id: string) => {
@@ -163,26 +196,41 @@ const App: React.FC = () => {
   };
 
   const exportToCSV = () => {
-    const headers = ["Complaint No", "Customer", "Phone", "Product", "Status", "Type", "Closing Date", "Amount"];
+    const headers = ["Complaint No", "Customer", "Phone", "Product", "Status", "Type", "Part Status", "Part Name", "Closing Date", "Amount", "Technician"];
     const rows = complaints.map(c => [
       c.complaintNumber,
-      c.customerName,
+      `"${c.customerName}"`,
       c.phoneNumber,
       c.productType,
       c.status,
       c.type,
+      c.partStatus || PartStatus.NONE,
+      `"${c.partName || ''}"`,
       c.closingDate || '-',
-      c.amountTaken || 0
+      c.amountTaken || 0,
+      `"${c.technicianName || 'N/A'}"`
     ]);
     
-    let csvContent = "data:text/csv;charset=utf-8," 
-      + headers.join(",") + "\n"
+    let csvContent = "\uFEFF" + headers.join(",") + "\n"
       + rows.map(e => e.join(",")).join("\n");
 
-    const encodedUri = encodeURI(csvContent);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `ServiceCenter_Report_${new Date().toLocaleDateString()}.csv`);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `ServiceCenter_AllComplaints_${new Date().toLocaleDateString()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadFullBackup = () => {
+    const data = JSON.stringify(complaints, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `ServiceCenter_FULL_BACKUP_${new Date().toLocaleDateString()}.json`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -256,8 +304,15 @@ const App: React.FC = () => {
           />
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
-          <div className="flex items-center gap-3 p-3 mb-4 bg-slate-800/50 rounded-lg">
+        <div className="p-4 border-t border-slate-800 space-y-2">
+          <button 
+            onClick={downloadFullBackup}
+            className="w-full flex items-center gap-2 p-2 text-sky-400 hover:text-white hover:bg-slate-800 rounded-lg transition text-xs font-bold"
+          >
+            <Database size={16} />
+            <span>Full System Backup</span>
+          </button>
+          <div className="flex items-center gap-3 p-3 mb-2 bg-slate-800/50 rounded-lg">
             <div className="w-10 h-10 bg-sky-500/20 rounded-full flex items-center justify-center text-sky-400 font-bold">
               {currentUser.name[0]}
             </div>
@@ -294,13 +349,13 @@ const App: React.FC = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            {activeTab === 'history' && (
+            {(activeTab === 'history' || activeTab === 'dashboard') && (
               <button 
                 onClick={exportToCSV}
-                className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-200 transition"
+                className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-100 transition border border-emerald-200"
               >
-                <Download size={16} />
-                Export CSV
+                <FileSpreadsheet size={16} />
+                Export to Excel
               </button>
             )}
           </div>
@@ -327,6 +382,8 @@ const App: React.FC = () => {
                         <th className="px-6 py-4">Complaint No</th>
                         <th className="px-6 py-4">Customer</th>
                         <th className="px-6 py-4">Product</th>
+                        <th className="px-6 py-4">Technician</th>
+                        <th className="px-6 py-4">Parts Info</th>
                         <th className="px-6 py-4 text-sm">Status</th>
                         <th className="px-6 py-4 text-right">Actions</th>
                       </tr>
@@ -343,6 +400,36 @@ const App: React.FC = () => {
                             <div className="flex flex-col gap-1">
                               <span className="text-sm font-medium text-slate-700">{complaint.productType}</span>
                               <span className="text-[10px] text-slate-400 font-bold uppercase">{complaint.type}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="relative flex items-center gap-2">
+                               <UserIcon size={14} className="text-slate-400" />
+                               <input 
+                                type="text"
+                                placeholder="Assign..."
+                                className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-sky-500 outline-none w-28"
+                                value={complaint.technicianName || ''}
+                                onChange={(e) => handleUpdateTechnician(complaint.id, e.target.value)}
+                               />
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col gap-2">
+                              <PartStatusSelector 
+                                currentStatus={complaint.partStatus || PartStatus.NONE}
+                                onChange={(s) => handleUpdatePartStatus(complaint.id, s)}
+                              />
+                              <div className="flex items-center gap-2">
+                                <Wrench size={12} className="text-slate-400" />
+                                <input 
+                                  type="text"
+                                  placeholder="Part name..."
+                                  className="bg-transparent border-b border-slate-200 text-[10px] py-0.5 focus:border-sky-500 outline-none w-24"
+                                  value={complaint.partName || ''}
+                                  onChange={(e) => handleUpdatePartName(complaint.id, e.target.value)}
+                                />
+                              </div>
                             </div>
                           </td>
                           <td className="px-6 py-4">
@@ -366,7 +453,7 @@ const App: React.FC = () => {
                       ))}
                       {activeComplaints.length === 0 && (
                         <tr>
-                          <td colSpan={5} className="px-6 py-20 text-center text-slate-400">
+                          <td colSpan={7} className="px-6 py-20 text-center text-slate-400">
                             No active complaints found. Great job!
                           </td>
                         </tr>
@@ -419,7 +506,7 @@ const App: React.FC = () => {
                           </td>
                           <td className="px-6 py-4">
                             <p className="text-sm text-slate-700">{complaint.workDone}</p>
-                            <p className="text-xs text-slate-400">Closed on {complaint.closingDate}</p>
+                            <p className="text-xs text-slate-400">Closed by <b>{complaint.technicianName}</b> on {complaint.closingDate}</p>
                           </td>
                           <td className="px-6 py-4 font-bold text-emerald-600">PKR {complaint.amountTaken}</td>
                           <td className="px-6 py-4">
@@ -461,7 +548,10 @@ const App: React.FC = () => {
       {isCloseModalOpen && selectedComplaintId && (
         <CloseModal 
           complaint={complaints.find(c => c.id === selectedComplaintId)!} 
-          onClose={() => setIsCloseModalOpen(false)}
+          onClose={() => {
+            setIsCloseModalOpen(false);
+            setSelectedComplaintId(null);
+          }}
           onConfirm={(data) => handleCloseComplaint(selectedComplaintId, data)}
         />
       )}
@@ -493,6 +583,33 @@ const StatusSelector: React.FC<{ currentStatus: ComplaintStatus; onChange: (s: C
         <option value={ComplaintStatus.REOPENED}>Reopened</option>
       </select>
       <ChevronDown className={`absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none transition-colors ${currentStatus === ComplaintStatus.PENDING ? 'text-amber-500' : currentStatus === ComplaintStatus.IN_PROGRESS ? 'text-sky-500' : 'text-rose-500'}`} size={12} />
+    </div>
+  );
+};
+
+const PartStatusSelector: React.FC<{ currentStatus: PartStatus; onChange: (s: PartStatus) => void }> = ({ currentStatus, onChange }) => {
+  const getStyle = (s: PartStatus) => {
+    switch (s) {
+      case PartStatus.REQUIRED: return 'bg-amber-50 text-amber-600 border-amber-200';
+      case PartStatus.NOT_AVAILABLE: return 'bg-rose-50 text-rose-600 border-rose-200';
+      case PartStatus.ATTENDING: return 'bg-indigo-50 text-indigo-600 border-indigo-200';
+      default: return 'bg-slate-50 text-slate-400 border-slate-100';
+    }
+  };
+
+  return (
+    <div className="relative inline-block group/select-part">
+      <select 
+        value={currentStatus} 
+        onChange={(e) => onChange(e.target.value as PartStatus)}
+        className={`appearance-none px-2 py-0.5 pr-6 rounded text-[10px] font-black border cursor-pointer focus:outline-none transition-all uppercase tracking-tight ${getStyle(currentStatus)} hover:brightness-95`}
+      >
+        <option value={PartStatus.NONE}>No Parts Req.</option>
+        <option value={PartStatus.REQUIRED}>Part Required</option>
+        <option value={PartStatus.NOT_AVAILABLE}>Not Available</option>
+        <option value={PartStatus.ATTENDING}>To Attending</option>
+      </select>
+      <Settings2 className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-current opacity-50" size={10} />
     </div>
   );
 };
@@ -661,11 +778,13 @@ const ReceiveForm: React.FC<{ onAdd: (c: Partial<Complaint>) => void }> = ({ onA
 };
 
 const CloseModal: React.FC<{ complaint: Complaint; onClose: () => void; onConfirm: (data: any) => void }> = ({ complaint, onClose, onConfirm }) => {
+  const [step, setStep] = useState<'form' | 'success'>('form');
+  const [isCopied, setIsCopied] = useState(false);
   const [data, setData] = useState({
     workDone: '',
-    partsChanged: '',
+    partsChanged: complaint.partName || '',
     amountTaken: 0,
-    technicianName: '',
+    technicianName: complaint.technicianName || '',
     type: complaint.type === ComplaintType.UNKNOWN ? ComplaintType.REVENUE : complaint.type
   });
 
@@ -674,6 +793,20 @@ const CloseModal: React.FC<{ complaint: Complaint; onClose: () => void; onConfir
     invoiceSlip?: string;
     feedbackVideo?: string;
   }>({});
+
+  const summaryText = useMemo(() => {
+    return `*Complaint #:* ${complaint.complaintNumber}
+*Customer:* ${complaint.customerName}
+*Phone:* ${complaint.phoneNumber}
+*Address:* ${complaint.address}
+
+*Work Done:* ${data.workDone}
+*Parts Replaced:* ${data.partsChanged || 'None'}
+*Amount Charged:* PKR ${data.amountTaken}
+
+*Technician:* ${data.technicianName}
+*Closing Date:* ${new Date().toLocaleDateString()}`;
+  }, [complaint, data]);
 
   const warrantyRef = useRef<HTMLInputElement>(null);
   const invoiceRef = useRef<HTMLInputElement>(null);
@@ -693,6 +826,48 @@ const CloseModal: React.FC<{ complaint: Complaint; onClose: () => void; onConfir
   const isWarranty = data.type === ComplaintType.WARRANTY;
   const canSubmit = !isWarranty || (files.warrantyCard && files.invoiceSlip);
 
+  const downloadReceipt = () => {
+    const headers = ["Field", "Value"];
+    const rows = [
+      ["Complaint Number", complaint.complaintNumber],
+      ["Customer", complaint.customerName],
+      ["Phone", complaint.phoneNumber],
+      ["Address", complaint.address.replace(/,/g, ' ')],
+      ["Technician", data.technicianName],
+      ["Closing Date", new Date().toLocaleDateString()],
+      ["Work Done", data.workDone.replace(/,/g, ' ')],
+      ["Parts Replaced", data.partsChanged.replace(/,/g, ' ')],
+      ["Amount Charged", `PKR ${data.amountTaken}`],
+      ["Case Type", data.type]
+    ];
+
+    let csvContent = "\uFEFF" + headers.join(",") + "\n"
+      + rows.map(e => e.join(",")).join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Receipt_Case_${complaint.complaintNumber}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onConfirm({ ...data, ...files });
+    // Auto-download receipt
+    downloadReceipt();
+    setStep('success');
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(summaryText);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
@@ -701,147 +876,139 @@ const CloseModal: React.FC<{ complaint: Complaint; onClose: () => void; onConfir
           <X size={24} />
         </button>
         
-        <h2 className="text-2xl font-bold text-slate-800 mb-2">Close Case #{complaint.complaintNumber}</h2>
-        <p className="text-slate-500 mb-8">Customer: {complaint.customerName}</p>
+        {step === 'form' ? (
+          <>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Close Case #{complaint.complaintNumber}</h2>
+            <p className="text-slate-500 mb-8">Customer: {complaint.customerName}</p>
 
-        <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); onConfirm({ ...data, ...files }); }}>
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase">Work Performed</label>
-            <textarea 
-              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm h-24"
-              placeholder="Describe the repair work done..."
-              required
-              value={data.workDone}
-              onChange={(e) => setData({...data, workDone: e.target.value})}
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase">Parts Changed</label>
-              <input 
-                type="text" 
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm"
-                value={data.partsChanged}
-                onChange={(e) => setData({...data, partsChanged: e.target.value})}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase">Amount Taken (PKR)</label>
-              <input 
-                type="number" 
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm"
-                value={data.amountTaken}
-                onChange={(e) => setData({...data, amountTaken: Number(e.target.value)})}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase">Technician Name</label>
-              <input 
-                type="text" 
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm"
-                required
-                value={data.technicianName}
-                onChange={(e) => setData({...data, technicianName: e.target.value})}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase">Case Type</label>
-              <select 
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm"
-                value={data.type}
-                onChange={(e) => setData({...data, type: e.target.value as ComplaintType})}
-              >
-                <option value={ComplaintType.WARRANTY}>Warranty</option>
-                <option value={ComplaintType.REVENUE}>Revenue (Paid)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="bg-sky-50 p-6 rounded-xl border border-sky-100 space-y-4">
-            <h4 className="text-sm font-bold text-sky-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Camera size={16} /> Evidence Attachments
+            <form className="space-y-6" onSubmit={handleSubmit}>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase">Work Performed</label>
+                <textarea 
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm h-24"
+                  placeholder="Describe the repair work done..."
+                  required
+                  value={data.workDone}
+                  onChange={(e) => setData({...data, workDone: e.target.value})}
+                />
               </div>
-              {isWarranty && <span className="text-[10px] text-sky-600 bg-sky-200/50 px-2 py-0.5 rounded uppercase font-black tracking-widest">Mandatory</span>}
-            </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Parts Changed</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm"
+                    value={data.partsChanged}
+                    onChange={(e) => setData({...data, partsChanged: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Amount Taken (PKR)</label>
+                  <input 
+                    type="number" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm"
+                    value={data.amountTaken}
+                    onChange={(e) => setData({...data, amountTaken: Number(e.target.value)})}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Technician Name</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm"
+                    required
+                    value={data.technicianName}
+                    onChange={(e) => setData({...data, technicianName: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Case Type</label>
+                  <select 
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm"
+                    value={data.type}
+                    onChange={(e) => setData({...data, type: e.target.value as ComplaintType})}
+                  >
+                    <option value={ComplaintType.WARRANTY}>Warranty</option>
+                    <option value={ComplaintType.REVENUE}>Revenue (Paid)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="bg-sky-50 p-6 rounded-xl border border-sky-100 space-y-4">
+                <h4 className="text-sm font-bold text-sky-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Camera size={16} /> Evidence Attachments
+                  </div>
+                  {isWarranty && <span className="text-[10px] text-sky-600 bg-sky-200/50 px-2 py-0.5 rounded uppercase font-black tracking-widest">Mandatory</span>}
+                </h4>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <input type="file" className="hidden" ref={warrantyRef} accept="image/*" onChange={(e) => handleFileChange(e, 'warrantyCard')} />
+                  <input type="file" className="hidden" ref={invoiceRef} accept="image/*" onChange={(e) => handleFileChange(e, 'invoiceSlip')} />
+                  <input type="file" className="hidden" ref={videoRef} accept="video/*" onChange={(e) => handleFileChange(e, 'feedbackVideo')} />
+
+                  <div onClick={() => warrantyRef.current?.click()} className={`aspect-video rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition cursor-pointer relative overflow-hidden group ${files.warrantyCard ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-sky-200 bg-white text-sky-400 hover:border-sky-400'}`}>
+                    {files.warrantyCard ? <><FileCheck size={20} className="z-10" /><span className="text-[10px] font-bold uppercase z-10">Warranty Card</span></> : <><Upload size={20} /><span className="text-[10px] font-bold uppercase">Warranty Card*</span></>}
+                  </div>
+
+                  <div onClick={() => invoiceRef.current?.click()} className={`aspect-video rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition cursor-pointer relative overflow-hidden group ${files.invoiceSlip ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-sky-200 bg-white text-sky-400 hover:border-sky-400'}`}>
+                    {files.invoiceSlip ? <><FileCheck size={20} className="z-10" /><span className="text-[10px] font-bold uppercase z-10">Invoice Slip</span></> : <><Upload size={20} /><span className="text-[10px] font-bold uppercase">Invoice Slip*</span></>}
+                  </div>
+
+                  <div onClick={() => videoRef.current?.click()} className={`aspect-video rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition cursor-pointer relative overflow-hidden group ${files.feedbackVideo ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-sky-200 bg-white text-sky-400 hover:border-sky-400'}`}>
+                    {files.feedbackVideo ? <><FileCheck size={20} className="z-10" /><span className="text-[10px] font-bold uppercase z-10">Video Added</span></> : <><Video size={20} /><span className="text-[10px] font-bold uppercase">Feedback Video</span></>}
+                  </div>
+                </div>
+                {isWarranty && (!files.warrantyCard || !files.invoiceSlip) && (
+                  <p className="text-[10px] font-bold text-rose-500 text-center animate-pulse">* Please attach the Warranty Card and Invoice Slip to close this warranty case.</p>
+                )}
+              </div>
+
+              <div className="pt-4">
+                <button type="submit" disabled={!canSubmit} className={`w-full py-3 rounded-xl font-bold transition shadow-lg ${canSubmit ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}>
+                  Submit & Close Complaint
+                </button>
+              </div>
+            </form>
+          </>
+        ) : (
+          <div className="py-8 flex flex-col items-center">
+            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-4">
+              <CheckCircle2 size={40} />
+            </div>
+            <h2 className="text-xl font-black text-slate-800 mb-1">Case Successfully Closed!</h2>
+            <p className="text-sm text-slate-500 mb-6 text-center">Receipt has been auto-downloaded. Copy the summary below to send it via WhatsApp.</p>
             
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Hidden Inputs */}
-              <input type="file" className="hidden" ref={warrantyRef} accept="image/*" onChange={(e) => handleFileChange(e, 'warrantyCard')} />
-              <input type="file" className="hidden" ref={invoiceRef} accept="image/*" onChange={(e) => handleFileChange(e, 'invoiceSlip')} />
-              <input type="file" className="hidden" ref={videoRef} accept="video/*" onChange={(e) => handleFileChange(e, 'feedbackVideo')} />
-
-              {/* Upload Buttons */}
-              <div 
-                onClick={() => warrantyRef.current?.click()}
-                className={`aspect-video rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition cursor-pointer relative overflow-hidden group ${files.warrantyCard ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-sky-200 bg-white text-sky-400 hover:border-sky-400'}`}
+            {/* Copy-Paste Summary Box */}
+            <div className="w-full bg-slate-50 rounded-2xl border border-slate-200 p-5 relative group mb-6">
+              <button 
+                onClick={handleCopy}
+                className={`absolute top-4 right-4 p-2 rounded-lg transition-all flex items-center gap-2 text-xs font-bold ${isCopied ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 shadow-sm'}`}
               >
-                {files.warrantyCard ? (
-                  <>
-                    <img src={files.warrantyCard} alt="Warranty Preview" className="absolute inset-0 w-full h-full object-cover opacity-20" />
-                    <FileCheck size={20} className="z-10" />
-                    <span className="text-[10px] font-bold uppercase z-10">Warranty Card</span>
-                  </>
-                ) : (
-                  <>
-                    <Upload size={20} />
-                    <span className="text-[10px] font-bold uppercase">Warranty Card*</span>
-                  </>
-                )}
-              </div>
-
-              <div 
-                onClick={() => invoiceRef.current?.click()}
-                className={`aspect-video rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition cursor-pointer relative overflow-hidden group ${files.invoiceSlip ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-sky-200 bg-white text-sky-400 hover:border-sky-400'}`}
-              >
-                {files.invoiceSlip ? (
-                  <>
-                    <img src={files.invoiceSlip} alt="Invoice Preview" className="absolute inset-0 w-full h-full object-cover opacity-20" />
-                    <FileCheck size={20} className="z-10" />
-                    <span className="text-[10px] font-bold uppercase z-10">Invoice Slip</span>
-                  </>
-                ) : (
-                  <>
-                    <Upload size={20} />
-                    <span className="text-[10px] font-bold uppercase">Invoice Slip*</span>
-                  </>
-                )}
-              </div>
-
-              <div 
-                onClick={() => videoRef.current?.click()}
-                className={`aspect-video rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 transition cursor-pointer relative overflow-hidden group ${files.feedbackVideo ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-sky-200 bg-white text-sky-400 hover:border-sky-400'}`}
-              >
-                {files.feedbackVideo ? (
-                  <>
-                    <FileCheck size={20} className="z-10" />
-                    <span className="text-[10px] font-bold uppercase z-10">Video Added</span>
-                  </>
-                ) : (
-                  <>
-                    <Video size={20} />
-                    <span className="text-[10px] font-bold uppercase">Feedback Video</span>
-                  </>
-                )}
-              </div>
+                {isCopied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy Receipt</>}
+              </button>
+              <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap leading-relaxed select-all">
+                {summaryText}
+              </pre>
             </div>
-            {isWarranty && (!files.warrantyCard || !files.invoiceSlip) && (
-              <p className="text-[10px] font-bold text-rose-500 text-center animate-pulse">
-                * Please attach the Warranty Card and Invoice Slip to close this warranty case.
-              </p>
-            )}
+            
+            <div className="flex flex-col gap-3 w-full max-w-sm">
+              <button 
+                onClick={downloadReceipt}
+                className="w-full flex items-center justify-center gap-3 bg-indigo-600 text-white py-4 rounded-2xl font-bold hover:bg-indigo-700 transition shadow-xl shadow-indigo-100"
+              >
+                <FileSpreadsheet size={20} />
+                Download Full CSV Receipt
+              </button>
+              <button 
+                onClick={onClose}
+                className="w-full text-slate-500 font-bold py-3 hover:text-slate-800 transition text-sm"
+              >
+                Back to Dashboard
+              </button>
+            </div>
           </div>
-
-          <div className="pt-4">
-            <button 
-              type="submit" 
-              disabled={!canSubmit}
-              className={`w-full py-3 rounded-xl font-bold transition shadow-lg ${canSubmit ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100' : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'}`}
-            >
-              Submit & Close Complaint
-            </button>
-          </div>
-        </form>
+        )}
       </div>
     </div>
   );
@@ -912,67 +1079,94 @@ const ReportsView: React.FC<{ complaints: Complaint[] }> = ({ complaints }) => {
   const totalWarrantyCount = closedComplaints.filter(c => c.type === ComplaintType.WARRANTY).length;
   const totalPaidCount = closedComplaints.filter(c => c.type === ComplaintType.REVENUE).length;
 
+  const exportReportToCSV = () => {
+    const summaryLines = [
+      ["Business Summary Report", new Date().toLocaleDateString()],
+      ["Metric", "Value"],
+      ["Total Gross Revenue", `PKR ${totalRevenue}`],
+      ["Warranty Support Cases", totalWarrantyCount],
+      ["Paid Revenue Cases", totalPaidCount],
+      ["Total Resolved Issues", closedComplaints.length],
+      [],
+      ["Technician Performance Leaderboard"],
+      ["Technician Name", "Cases Completed", "Revenue Generated", "Reopen Frequency"],
+    ];
+
+    technicianPerformance.forEach(tech => {
+      summaryLines.push([`"${tech.name}"`, tech.completed, tech.revenue, tech.reopened]);
+    });
+
+    summaryLines.push([]);
+    summaryLines.push(["Daily Revenue Timeline"]);
+    summaryLines.push(["Date", "Revenue (PKR)"]);
+    revenueByDay.forEach(day => {
+      summaryLines.push([day.name, day.revenue]);
+    });
+
+    summaryLines.push([]);
+    summaryLines.push(["Case Mix by Product Category"]);
+    summaryLines.push(["Category", "Total Count"]);
+    productBreakdown.forEach(prod => {
+      summaryLines.push([prod.name, prod.value]);
+    });
+    
+    let csvContent = "\uFEFF" + summaryLines.map(e => e.join(",")).join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `ServiceCenter_Excel_Report_${new Date().toLocaleDateString()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-8">
-      {/* Quick Summary */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-bold text-slate-800">Business Analytics</h3>
+          <p className="text-sm text-slate-500">Professional performance metrics for Excel/Sheets analysis</p>
+        </div>
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+           <button 
+            onClick={exportReportToCSV}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-emerald-700 transition shadow-lg shadow-emerald-100 border border-emerald-500"
+          >
+            <FileSpreadsheet size={18} />
+            Export to Excel
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-6 shadow-sm">
-          <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <TrendingUp size={28} />
-          </div>
-          <div>
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">Total Revenue</p>
-            <p className="text-xl font-black text-slate-800">PKR {totalRevenue.toLocaleString()}</p>
-          </div>
+          <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600"><TrendingUp size={28} /></div>
+          <div><p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">Total Revenue</p><p className="text-xl font-black text-slate-800">PKR {totalRevenue.toLocaleString()}</p></div>
         </div>
         <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-6 shadow-sm">
-          <div className="w-14 h-14 rounded-full bg-sky-50 flex items-center justify-center text-sky-600">
-            <ShieldCheck size={28} />
-          </div>
-          <div>
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">Warranty Cases</p>
-            <p className="text-xl font-black text-slate-800">{totalWarrantyCount}</p>
-          </div>
+          <div className="w-14 h-14 rounded-full bg-sky-50 flex items-center justify-center text-sky-600"><ShieldCheck size={28} /></div>
+          <div><p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">Warranty Cases</p><p className="text-xl font-black text-slate-800">{totalWarrantyCount}</p></div>
         </div>
         <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-6 shadow-sm">
-          <div className="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
-            <Banknote size={28} />
-          </div>
-          <div>
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">Paid Cases</p>
-            <p className="text-xl font-black text-slate-800">{totalPaidCount}</p>
-          </div>
+          <div className="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center text-amber-600"><Banknote size={28} /></div>
+          <div><p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">Paid Cases</p><p className="text-xl font-black text-slate-800">{totalPaidCount}</p></div>
         </div>
         <div className="bg-white p-6 rounded-2xl border border-slate-200 flex items-center gap-6 shadow-sm">
-          <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
-            <Users size={28} />
-          </div>
-          <div>
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">Active Techs</p>
-            <p className="text-xl font-black text-slate-800">{technicianPerformance.length}</p>
-          </div>
+          <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600"><Users size={28} /></div>
+          <div><p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight">Active Techs</p><p className="text-xl font-black text-slate-800">{technicianPerformance.length}</p></div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Case Type Count Comparison */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-             <ShieldCheck size={18} className="text-sky-500" /> Case Type Breakdown (Counts)
-          </h3>
+          <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><ShieldCheck size={18} className="text-sky-500" /> Case Type Breakdown (Counts)</h3>
           <div className="h-64 flex items-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie
-                  data={caseTypeBreakdown}
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {caseTypeBreakdown.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.name === ComplaintType.WARRANTY ? '#0ea5e9' : '#10b981'} />
-                  ))}
+                <Pie data={caseTypeBreakdown} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                  {caseTypeBreakdown.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.name === ComplaintType.WARRANTY ? '#0ea5e9' : '#10b981'} />)}
                 </Pie>
                 <Tooltip />
               </PieChart>
@@ -980,10 +1174,7 @@ const ReportsView: React.FC<{ complaints: Complaint[] }> = ({ complaints }) => {
             <div className="space-y-4 pr-8">
               {caseTypeBreakdown.map((entry) => (
                 <div key={entry.name} className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.name === ComplaintType.WARRANTY ? '#0ea5e9' : '#10b981' }}></div>
-                    <span className="text-xs font-bold text-slate-700 uppercase">{entry.name}</span>
-                  </div>
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.name === ComplaintType.WARRANTY ? '#0ea5e9' : '#10b981' }}></div><span className="text-xs font-bold text-slate-700 uppercase">{entry.name}</span></div>
                   <span className="text-lg font-black text-slate-900 ml-5">{entry.value} <span className="text-[10px] text-slate-400 font-normal">Cases</span></span>
                 </div>
               ))}
@@ -991,32 +1182,21 @@ const ReportsView: React.FC<{ complaints: Complaint[] }> = ({ complaints }) => {
           </div>
         </div>
 
-        {/* Revenue by Case Type Comparison */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-            <TrendingUp size={18} className="text-emerald-500" /> Revenue Distribution
-          </h3>
+          <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><TrendingUp size={18} className="text-emerald-500" /> Revenue Distribution</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={revenueByCaseType} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                 <XAxis type="number" hide />
                 <YAxis dataKey="name" type="category" fontSize={10} width={80} axisLine={false} tickLine={false} />
-                <Tooltip 
-                  cursor={{ fill: '#f8fafc' }}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
-                   {revenueByCaseType.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.name === ComplaintType.WARRANTY ? '#0ea5e9' : '#10b981'} />
-                  ))}
-                </Bar>
+                <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+                <Bar dataKey="amount" radius={[0, 4, 4, 0]}>{revenueByCaseType.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.name === ComplaintType.WARRANTY ? '#0ea5e9' : '#10b981'} />)}</Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Daily Revenue Chart */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <h3 className="text-lg font-bold text-slate-800 mb-6">Revenue Growth Over Time</h3>
           <div className="h-64">
@@ -1032,82 +1212,20 @@ const ReportsView: React.FC<{ complaints: Complaint[] }> = ({ complaints }) => {
           </div>
         </div>
 
-        {/* Product Breakdown */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <h3 className="text-lg font-bold text-slate-800 mb-6">Complaint Volume by Product</h3>
           <div className="h-64 flex items-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie
-                  data={productBreakdown}
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {productBreakdown.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
+                <Pie data={productBreakdown} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                  {productBreakdown.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                 </Pie>
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
-            <div className="grid grid-cols-1 gap-2 pr-4">
-              {productBreakdown.map((entry, index) => (
-                <div key={entry.name} className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{entry.name}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Technician Table */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-lg font-bold text-slate-800">Technician Performance Summary</h3>
-            <span className="text-xs text-slate-400 font-medium">Sorted by total cases completed</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-4">
-                  <th className="pb-4">Technician</th>
-                  <th className="pb-4">Closed Cases</th>
-                  <th className="pb-4">Revenue PKR</th>
-                  <th className="pb-4">Reopened</th>
-                  <th className="pb-4">Trust Score</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {technicianPerformance.sort((a,b) => b.completed - a.completed).map(tech => (
-                  <tr key={tech.name} className="group transition-colors hover:bg-slate-50/50">
-                    <td className="py-5 flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm">
-                        {tech.name[0]}
-                      </div>
-                      <span className="font-semibold text-slate-800">{tech.name}</span>
-                    </td>
-                    <td className="py-5 text-sm text-slate-600 font-medium">{tech.completed}</td>
-                    <td className="py-5 text-sm font-bold text-emerald-600">PKR {tech.revenue.toLocaleString()}</td>
-                    <td className="py-5">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${tech.reopened > 2 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {tech.reopened} Reopens
-                      </span>
-                    </td>
-                    <td className="py-5">
-                      <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-indigo-500 rounded-full transition-all duration-500" 
-                          style={{ width: `${Math.min(100, (tech.completed / (tech.completed + tech.reopened || 1)) * 100)}%` }}
-                        ></div>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="grid grid-cols-1 gap-2 pr-4">{productBreakdown.map((entry, index) => (
+              <div key={entry.name} className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div><span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{entry.name}</span></div>
+            ))}</div>
           </div>
         </div>
       </div>

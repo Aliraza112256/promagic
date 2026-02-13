@@ -12,6 +12,13 @@ export enum ComplaintType {
   UNKNOWN = 'Unknown'
 }
 
+export enum PartStatus {
+  NONE = 'None',
+  REQUIRED = 'Required',
+  NOT_AVAILABLE = 'Not Available',
+  ATTENDING = 'Attending'
+}
+
 export enum ProductType {
   AC = 'AC',
   REFRIGERATOR = 'Refrigerator',
@@ -31,6 +38,10 @@ export interface Complaint {
   date: string;
   status: ComplaintStatus;
   type: ComplaintType;
+  
+  // Parts Info
+  partStatus?: PartStatus;
+  partName?: string;
   
   // Closing Data
   workDone?: string;
